@@ -4,9 +4,91 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>XO Game</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 24px; }
+    .board { display: grid; grid-template-columns: repeat(3, 80px); gap: 8px; margin-top: 16px; }
+    .cell { width: 80px; height: 80px; font-size: 32px; cursor: pointer; }
+    .row { margin-top: 12px; display: flex; gap: 8px; align-items: center; }
+    #status { font-weight: 600; }
+  </style>
 </head>
 <body>
-  <h1>XO (Step 1)</h1>
-  <p>If you can see this page, Flask is running successfully.</p>
+  <h1>XO</h1>
+
+  <div class="row">
+    <span id="status">Turn: X</span>
+    <button id="resetBtn" type="button">Reset</button>
+  </div>
+
+  <div class="board" id="board" aria-label="Tic Tac Toe board"></div>
+
+  <script>
+    const boardEl = document.getElementById("board");
+    const statusEl = document.getElementById("status");
+    const resetBtn = document.getElementById("resetBtn");
+
+    let board = Array(9).fill("");
+    let current = "X";
+    let gameOver = false;
+
+    function winnerOf(b) {
+      const lines = [
+        [0,1,2],[3,4,5],[6,7,8],
+        [0,3,6],[1,4,7],[2,5,8],
+        [0,4,8],[2,4,6]
+      ];
+      for (const [a,c,d] of lines) {
+        if (b[a] && b[a] === b[c] && b[a] === b[d]) return b[a];
+      }
+      if (b.every(v => v !== "")) return "DRAW";
+      return null;
+    }
+
+    function render() {
+      boardEl.innerHTML = "";
+      for (let i = 0; i < 9; i++) {
+        const btn = document.createElement("button");
+        btn.className = "cell";
+        btn.type = "button";
+        btn.textContent = board[i];
+        btn.setAttribute("aria-label", `Cell ${i + 1}`);
+        btn.addEventListener("click", () => onMove(i));
+        boardEl.appendChild(btn);
+      }
+
+      const w = winnerOf(board);
+      if (w === "DRAW") {
+        statusEl.textContent = "Result: Draw";
+        gameOver = true;
+      } else if (w) {
+        statusEl.textContent = `Winner: ${w}`;
+        gameOver = true;
+      } else {
+        statusEl.textContent = `Turn: ${current}`;
+        gameOver = false;
+      }
+    }
+
+    function onMove(i) {
+      if (gameOver) return;
+      if (board[i] !== "") return;
+
+      board[i] = current;
+      current = current === "X" ? "O" : "X";
+      render();
+    }
+
+    function reset() {
+      board = Array(9).fill("");
+      current = "X";
+      gameOver = false;
+      render();
+    }
+
+    resetBtn.addEventListener("click", reset);
+
+    render();
+  </script>
 </body>
 </html>
+
