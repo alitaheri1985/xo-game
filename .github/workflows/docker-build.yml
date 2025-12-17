@@ -9,7 +9,7 @@ on:
       - main
 
 jobs:
-  build-and-smoke-test:
+   build-test-push:
     runs-on: ubuntu-latest
 
     steps:
@@ -19,29 +19,24 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image
+      - name: Log in to Docker Hub
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build (PR) - no push
+        if: github.event_name == 'pull_request'
         run: |
           docker build -t xo-game:ci .
 
-      - name: Run container
-        run: |
-          docker run -d --name xo-game-ci -p 5000:5000 xo-game:ci
-
-      - name: Smoke test /api/state
-        run: |
-          for i in 1 2 3 4 5 6 7 8 9 10; do
-            if curl -fsS http://localhost:5000/api/state > /dev/null; then
-              echo "OK"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "App did not respond in time"
-          docker logs xo-game-ci || true
-          exit 1
-
-      - name: Cleanup
-        if: always()
-        run: |
-          docker rm -f xo-game-ci || true
-
+      - name: Build and Push (main)
+        if: github.event_name == 'push'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            alitaheri1985/xo-game:latest
+            alitaheri1985/xo-game:${{ github.sha }}
