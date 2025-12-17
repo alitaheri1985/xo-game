@@ -25,7 +25,8 @@ def new_game_state():
         "board": [""] * 9,
         "current": "X",
         "winner": None,
-        "players": {"X": None, "O": None},  # tokens for players
+        "players": {"X": None, "O": None},
+        "nonce": uuid.uuid4().hex,  # changes on "Start"
     }
 
 
@@ -109,14 +110,35 @@ def api_get_game(game_id):
     return jsonify(state)
 
 
+@app.post("/api/games/<game_id>/start")
+def api_start_game(game_id):
+    state = load_game(game_id)
+    if state is None:
+        return jsonify({"error": "Game not found"}), 404
+
+    state = new_game_state()  # clears players and generates new nonce
+    save_game(game_id, state)
+    return jsonify(state)
+
+
+
 @app.post("/api/games/<game_id>/reset")
 def api_reset_game(game_id):
     state = load_game(game_id)
     if state is None:
         return jsonify({"error": "Game not found"}), 404
+
+    players = state.get("players", {"X": None, "O": None})
+    nonce = state.get("nonce")
+
     state = new_game_state()
+    state["players"] = players
+    state["nonce"] = nonce
+    state["current"] = "X"
+
     save_game(game_id, state)
     return jsonify(state)
+
 
 
 @app.post("/api/games/<game_id>/move")
@@ -161,9 +183,16 @@ def api_join_game(game_id):
     if state is None:
         return jsonify({"error": "Game not found"}), 404
 
-    role, token = assign_player(state)
+    data = request.get_json(silent=True) or {}
+    token = data.get("token", "")
+
+    existing_role = role_for_token(state, token)
+    if existing_role in ("X", "O"):
+        return jsonify({"role": existing_role, "token": token, "nonce": state.get("nonce")})
+
+    role, new_token = assign_player(state)
     save_game(game_id, state)
-    return jsonify({"role": role, "token": token})
+    return jsonify({"role": role, "token": new_token, "nonce": state.get("nonce")})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
