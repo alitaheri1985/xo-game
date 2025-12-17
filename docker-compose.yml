@@ -4,3 +4,15 @@ services:
     ports:
       - "5000:5000"
     restart: unless-stopped
+    environment:
+      # We'll use this in the next step when we switch storage to Redis
+      REDIS_URL: redis://redis:6379/0
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redis_data:
