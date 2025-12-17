@@ -8,29 +8,44 @@
     body { font-family: system-ui, Arial, sans-serif; margin: 24px; }
     .board { display: grid; grid-template-columns: repeat(3, 80px); gap: 8px; margin-top: 16px; }
     .cell { width: 80px; height: 80px; font-size: 32px; cursor: pointer; }
-    .row { margin-top: 12px; display: flex; gap: 8px; align-items: center; }
+    .row { margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
     #status { font-weight: 600; }
     #error { margin-top: 10px; }
+    #share { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
   </style>
 </head>
 <body>
   <h1>XO</h1>
 
-  <div class="row">
-    <span id="status">Loading...</span>
-    <button id="resetBtn" type="button">Reset</button>
-  </div>
+<div class="row">
+  <span id="status">Loading...</span>
+  <button id="resetBtn" type="button">Reset</button>
+</div>
 
-  <div id="error" aria-live="polite"></div>
-  <div class="board" id="board" aria-label="Tic Tac Toe board"></div>
+<div class="row">
+  <span>Share link:</span>
+  <input id="shareInput" readonly value="..." size="60" />
+  <button id="copyBtn" type="button">Copy</button>
+</div>
+
+<div id="error" aria-live="polite"></div>
+<div class="board" id="board" aria-label="Tic Tac Toe board"></div>
+
 
   <script>
     const boardEl = document.getElementById("board");
     const statusEl = document.getElementById("status");
     const errorEl = document.getElementById("error");
     const resetBtn = document.getElementById("resetBtn");
+    const shareEl = document.getElementById("shareInput");
+    const copyBtn = document.getElementById("copyBtn");
 
+    let gameId = null;
     let state = null;
+    let pollTimer = null;
+    let role = "SPECTATOR";
+    let token = "";
+
 
     function setError(msg) {
       errorEl.textContent = msg || "";
@@ -41,6 +56,13 @@
       if (s.winner === "DRAW") return "Result: Draw";
       if (s.winner === "X" || s.winner === "O") return `Winner: ${s.winner}`;
       return `Turn: ${s.current}`;
+    }
+
+    function updateShareLink(id) {
+      const url = new URL(window.location.href);
+      url.searchParams.set("game", id);
+      window.history.replaceState({}, "", url.toString());
+      shareEl.value = url.toString();
     }
 
     function render() {
@@ -61,42 +83,125 @@
       }
     }
 
-    async function fetchState() {
+    
+
+    function storageKey(id) {
+        return `xo_token_${id}`;
+    }
+
+    async function joinGame() {
+        token = localStorage.getItem(storageKey(gameId)) || "";
+        const res = await fetch(`/api/games/${gameId}/join`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ index: token }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            setError(data.error || "Join failed");
+            return;
+        }
+
+        role = data.role || "SPECTATOR";
+        if (data.token) {
+            token = data.token;
+            localStorage.setItem(storageKey(gameId), token);
+        }
+    }
+
+
+
+
+
+    async function createGame() {
       setError("");
-      const res = await fetch("/api/state");
-      state = await res.json();
+      const res = await fetch("/api/games", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to create game");
+        return;
+      }
+      gameId = data.game_id;
+      state = data.state;
+      updateShareLink(gameId);
       render();
     }
 
-    async function reset() {
+    async function fetchGame() {
       setError("");
-      const res = await fetch("/api/reset", { method: "POST" });
-      state = await res.json();
+      const res = await fetch(`/api/games/${gameId}`);
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to load game");
+        return;
+      }
+      state = data;
+      render();
+    }
+
+    async function resetGame() {
+      setError("");
+      const res = await fetch(`/api/games/${gameId}/reset`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to reset game");
+        return;
+      }
+      state = data;
       render();
     }
 
     async function move(i) {
       setError("");
-      const res = await fetch("/api/move", {
+      const res = await fetch(`/api/games/${gameId}/move`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ index: i }),
+        body: JSON.stringify({ index: i, token }),
       });
-
       const data = await res.json();
-
       if (!res.ok) {
-        setError(data.error || "Unknown error");
+        setError(data.error || "Move failed");
         return;
       }
-
       state = data;
       render();
     }
 
-    resetBtn.addEventListener("click", reset);
+    resetBtn.addEventListener("click", resetGame);
 
-    fetchState();
+   copyBtn.addEventListener("click", async () => {
+      try {
+        shareEl.select();
+        shareEl.setSelectionRange(0, 99999);
+
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(shareEl.value);
+        } else {
+          document.execCommand("copy");
+        }
+        setError("Copied.");
+        setTimeout(() => setError(""), 800);
+      } catch {
+        setError("Copy failed. Please manually copy the link from the input.");
+      }
+    });
+
+
+    (async function init() {
+      const url = new URL(window.location.href);
+      const q = url.searchParams.get("game");
+      if (q) {
+        gameId = q;
+        updateShareLink(gameId);
+      } else {
+        await createGame();
+      }
+        await joinGame();
+        await fetchGame();
+
+      if (pollTimer) clearInterval(pollTimer);
+        pollTimer = setInterval(fetchGame, 1000);
+    })();
   </script>
 </body>
 </html>
