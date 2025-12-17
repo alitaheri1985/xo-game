@@ -10,84 +10,93 @@
     .cell { width: 80px; height: 80px; font-size: 32px; cursor: pointer; }
     .row { margin-top: 12px; display: flex; gap: 8px; align-items: center; }
     #status { font-weight: 600; }
+    #error { margin-top: 10px; }
   </style>
 </head>
 <body>
   <h1>XO</h1>
 
   <div class="row">
-    <span id="status">Turn: X</span>
+    <span id="status">Loading...</span>
     <button id="resetBtn" type="button">Reset</button>
   </div>
 
+  <div id="error" aria-live="polite"></div>
   <div class="board" id="board" aria-label="Tic Tac Toe board"></div>
 
   <script>
     const boardEl = document.getElementById("board");
     const statusEl = document.getElementById("status");
+    const errorEl = document.getElementById("error");
     const resetBtn = document.getElementById("resetBtn");
 
-    let board = Array(9).fill("");
-    let current = "X";
-    let gameOver = false;
+    let state = null;
 
-    function winnerOf(b) {
-      const lines = [
-        [0,1,2],[3,4,5],[6,7,8],
-        [0,3,6],[1,4,7],[2,5,8],
-        [0,4,8],[2,4,6]
-      ];
-      for (const [a,c,d] of lines) {
-        if (b[a] && b[a] === b[c] && b[a] === b[d]) return b[a];
-      }
-      if (b.every(v => v !== "")) return "DRAW";
-      return null;
+    function setError(msg) {
+      errorEl.textContent = msg || "";
+    }
+
+    function statusText(s) {
+      if (!s) return "Loading...";
+      if (s.winner === "DRAW") return "Result: Draw";
+      if (s.winner === "X" || s.winner === "O") return `Winner: ${s.winner}`;
+      return `Turn: ${s.current}`;
     }
 
     function render() {
+      if (!state) return;
+
+      statusEl.textContent = statusText(state);
       boardEl.innerHTML = "";
+
       for (let i = 0; i < 9; i++) {
         const btn = document.createElement("button");
         btn.className = "cell";
         btn.type = "button";
-        btn.textContent = board[i];
+        btn.textContent = state.board[i];
+        btn.disabled = (state.winner !== null) || (state.board[i] !== "");
         btn.setAttribute("aria-label", `Cell ${i + 1}`);
-        btn.addEventListener("click", () => onMove(i));
+        btn.addEventListener("click", () => move(i));
         boardEl.appendChild(btn);
-      }
-
-      const w = winnerOf(board);
-      if (w === "DRAW") {
-        statusEl.textContent = "Result: Draw";
-        gameOver = true;
-      } else if (w) {
-        statusEl.textContent = `Winner: ${w}`;
-        gameOver = true;
-      } else {
-        statusEl.textContent = `Turn: ${current}`;
-        gameOver = false;
       }
     }
 
-    function onMove(i) {
-      if (gameOver) return;
-      if (board[i] !== "") return;
-
-      board[i] = current;
-      current = current === "X" ? "O" : "X";
+    async function fetchState() {
+      setError("");
+      const res = await fetch("/api/state");
+      state = await res.json();
       render();
     }
 
-    function reset() {
-      board = Array(9).fill("");
-      current = "X";
-      gameOver = false;
+    async function reset() {
+      setError("");
+      const res = await fetch("/api/reset", { method: "POST" });
+      state = await res.json();
+      render();
+    }
+
+    async function move(i) {
+      setError("");
+      const res = await fetch("/api/move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ index: i }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Unknown error");
+        return;
+      }
+
+      state = data;
       render();
     }
 
     resetBtn.addEventListener("click", reset);
 
-    render();
+    fetchState();
   </script>
 </body>
 </html>

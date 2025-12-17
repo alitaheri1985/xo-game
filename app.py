@@ -3,7 +3,8 @@ from flask import Flask, render_template, jsonify, session, request
 app = Flask(__name__)
 
 # Needed for signed session cookies
-app.config["SECRET_KEY"] = "dev-secret-change-me"
+import os
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret")
 
 
 def new_game_state():
