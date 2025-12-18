@@ -1,0 +1,47 @@
+name: ci-docker
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (Dockerfile)
+        run: docker build -t xo-game:ci .
+
+      - name: Compose up
+        run: docker compose up -d --build
+
+      - name: Smoke test (HTTP)
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://localhost:8080 >/dev/null; then
+              echo "Service is up"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Service did not become ready in time"
+          docker compose logs
+          exit 1
+
+      - name: Compose down
+        if: always()
+        run: docker compose down --volumes
