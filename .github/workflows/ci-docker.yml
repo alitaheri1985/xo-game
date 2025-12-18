@@ -32,7 +32,7 @@ jobs:
       - name: Smoke test (HTTP)
         run: |
           for i in {1..30}; do
-            if curl -fsS http://localhost:8080 >/dev/null; then
+            if curl -fsS http://localhost:5000 >/dev/null; then
               echo "Service is up"
               exit 0
             fi
