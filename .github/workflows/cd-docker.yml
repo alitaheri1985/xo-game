@@ -1,4 +1,4 @@
-name: cd-docker-push
+name: cd-docker-push!
 
 on:
   push:
